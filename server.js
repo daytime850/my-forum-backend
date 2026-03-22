@@ -3,69 +3,57 @@ const { Pool } = require('pg');
 const cors = require('cors');
 
 const app = express();
+
+// 1. 基础配置：允许跨域和 JSON 解析
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); // 允许处理较大的图片数据
+app.use(express.json());
 
-// 数据库连接配置
+// 2. 数据库连接 (使用 Railway 的环境变量)
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
-// 初始化数据库表
-async function initDB() {
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS posts (
-            id SERIAL PRIMARY KEY,
-            title TEXT NOT NULL,
-            content TEXT NOT NULL,
-            image_url TEXT, 
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    `);
-}
-initDB();
-
-// 获取帖子列表
+// 3. 获取帖子接口
 app.get('/posts', async (req, res) => {
-    try {
-        const result = await pool.query('SELECT * FROM posts ORDER BY created_at DESC');
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).send(err.message);
-    }
+  try {
+    // 明确查询 image_url 字段
+    const result = await pool.query('SELECT id, title, content, image_url, created_at FROM posts ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error("读取数据库出错:", err);
+    res.status(500).send("读取失败");
+  }
 });
 
-// 发布新帖子（支持图片链接）
+// 4. 发布帖子接口 (纠错增强版)
 app.post('/posts', async (req, res) => {
-    const { title, content, image_url } = req.body;
-    try {
-        const result = await pool.query(
-            'INSERT INTO posts (title, content, image_url) VALUES ($1, $2, $3) RETURNING *',
-            [title, content, image_url]
-        );
-        res.json(result.rows[0]);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send("服务器保存失败");
-    }
+  const { title, content, image_url } = req.body;
+  
+  // 【调试重点】这行代码会在 Railway 的 Logs 里打印出收到的数据
+  console.log("=== 收到新帖子请求 ===");
+  console.log("标题:", title);
+  console.log("图片链接是否存在:", !!image_url);
+  console.log("图片链接内容:", image_url || "无图片");
+
+  try {
+    // 执行插入操作
+    const result = await pool.query(
+      'INSERT INTO posts (title, content, image_url) VALUES ($1, $2, $3) RETURNING *',
+      [title, content, image_url || null]
+    );
+    console.log("数据库写入成功，ID:", result.rows[0].id);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("数据库写入失败，详细错误:", err.message);
+    res.status(500).send("存入失败: " + err.message);
+  }
 });
-// 确保这一段在你的 server.js 中
-app.post('/posts', async (req, res) => {
-    // 必须接收 image_url
-    const { title, content, image_url } = req.body; 
-    try {
-        const result = await pool.query(
-            'INSERT INTO posts (title, content, image_url) VALUES ($1, $2, $3) RETURNING *',
-            [title, content, image_url]
-        );
-        res.json(result.rows[0]);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send(err.message);
-    }
-});
+
+// 5. 启动
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`服务器运行在端口 ${PORT}`);
+  console.log(`服务已启动，监听端口: ${PORT}`);
 });
