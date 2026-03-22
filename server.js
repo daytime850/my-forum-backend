@@ -50,7 +50,21 @@ app.post('/posts', async (req, res) => {
         res.status(500).send("服务器保存失败");
     }
 });
-
+// 确保这一段在你的 server.js 中
+app.post('/posts', async (req, res) => {
+    // 必须接收 image_url
+    const { title, content, image_url } = req.body; 
+    try {
+        const result = await pool.query(
+            'INSERT INTO posts (title, content, image_url) VALUES ($1, $2, $3) RETURNING *',
+            [title, content, image_url]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send(err.message);
+    }
+});
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`服务器运行在端口 ${PORT}`);
