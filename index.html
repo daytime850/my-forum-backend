@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>极客学习论坛 - 云端正式版</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- 🔑 云端地址配置 ---
+        const API_URL = "https://my-forum-backend-production.up.railway.app";
+
+        function App() {
+            const [posts, setPosts] = useState([]);
+            const [userScore, setUserScore] = useState(0);
+            const [newPost, setNewPost] = useState({ title: '', content: '' });
+            const [loading, setLoading] = useState(true);
+
+            // 1. 页面加载时从云端获取帖子
+            useEffect(() => {
+                fetchPosts();
+            }, []);
+
+            async function fetchPosts() {
+                try {
+                    const res = await fetch(`${API_URL}/posts`);
+                    const data = await res.json();
+                    setPosts(data.reverse()); // 最新帖子排在前面
+                } catch (e) {
+                    console.error("加载失败", e);
+                } finally {
+                    setLoading(false);
+                }
+            }
+
+            // 2. 发布帖子到云端
+            const handlePublish = async () => {
+                if(!newPost.title || !newPost.content) return alert("请填写内容");
+                
+                const btn = document.getElementById('publishBtn');
+                btn.disabled = true;
+                btn.innerText = "发送中...";
+
+                try {
+                    const response = await fetch(`${API_URL}/posts`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            title: newPost.title,
+                            content: newPost.content
+                        })
+                    });
+
+                    if(response.ok) {
+                        setUserScore(prev => prev + 5); // 增加本地积分显示
+                        setNewPost({ title: '', content: '' });
+                        alert("发布成功！积分 +5");
+                        await fetchPosts(); // 刷新列表
+                    }
+                } catch (e) {
+                    alert("云端连接失败，请检查网络");
+                } finally {
+                    btn.disabled = false;
+                    btn.innerText = "立即发布";
+                }
+            };
+
+            return (
+                <div className="min-h-screen">
+                    {/* 导航栏 */}
+                    <nav className="bg-white shadow-sm border-b px-8 py-4 flex justify-between items-center sticky top-0 z-10">
+                        <h1 className="text-2xl font-bold text-blue-600">GeekForum</h1>
+                        <div className="flex items-center gap-4">
+                            <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-bold">
+                                我的积分: {userScore}
+                            </span>
+                            <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">我</div>
+                        </div>
+                    </nav>
+
+                    <main className="max-w-6xl mx-auto mt-8 grid grid-cols-12 gap-6 px-4 pb-20">
+                        {/* 左侧：发帖区 */}
+                        <div className="col-span-12 lg:col-span-8 space-y-6">
+                            <div className="bg-white p-6 rounded-xl shadow-sm border">
+                                <h2 className="text-lg font-bold mb-4">发布新讨论</h2>
+                                <input 
+                                    className="w-full p-3 border rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 outline-none" 
+                                    placeholder="输入一个吸引人的标题..." 
+                                    value={newPost.title}
+                                    onChange={e => setNewPost({...newPost, title: e.target.value})}
+                                />
+                                <textarea 
+                                    className="w-full p-3 border rounded-lg h-32 mb-4 focus:ring-2 focus:ring-blue-500 outline-none font-mono" 
+                                    placeholder="写点内容吧..."
+                                    value={newPost.content}
+                                    onChange={e => setNewPost({...newPost, content: e.target.value})}
+                                />
+                                <button 
+                                    id="publishBtn"
+                                    onClick={handlePublish}
+                                    className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 transition disabled:bg-gray-400"
+                                >
+                                    立即发布
+                                </button>
+                            </div>
+
+                            {/* 帖子列表 */}
+                            <div className="space-y-4">
+                                {loading ? (
+                                    <p className="text-center text-gray-400">正在连接云端数据库...</p>
+                                ) : posts.map(post => (
+                                    <div key={post.id} className="bg-white p-6 rounded-xl shadow-sm border hover:border-blue-300 transition cursor-pointer">
+                                        <div className="flex gap-2 mb-2">
+                                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">#云端数据</span>
+                                        </div>
+                                        <h3 className="text-xl font-bold mb-2">{post.title}</h3>
+                                        <p className="text-gray-500 text-sm mb-4 line-clamp-3">{post.content}</p>
+                                        <div className="flex justify-between items-center text-xs text-gray-400">
+                                            <span>作者: 匿名学霸</span>
+                                            <span>ID: {post.id}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 右侧：排行榜 */}
+                        <div className="col-span-12 lg:col-span-4 space-y-6">
+                            <div className="bg-white p-6 rounded-xl shadow-sm border">
+                                <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                                    🏆 排行榜
+                                </h2>
+                                <div className="space-y-4">
+                                    {[
+                                        {name: '爱因斯坦', xp: 2940},
+                                        {name: '居里夫人', xp: 2510},
+                                        {name: '费曼', xp: 1980},
+                                        {name: '你', xp: userScore}
+                                    ].map((user, i) => (
+                                        <div key={i} className="flex justify-between items-center">
+                                            <span className="text-gray-700">{i+1}. {user.name}</span>
+                                            <span className="font-mono font-bold text-blue-600">{user.xp} pts</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
